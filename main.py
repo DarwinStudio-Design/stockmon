@@ -327,23 +327,49 @@ async def status():
 async def get_yaml():
     return {"yaml": yaml.dump({"watchlist": wl.get_watchlist()}, default_flow_style=False, allow_unicode=True)}
 
+def clean_yaml_input(text: str) -> str:
+    """Pulisce YAML da markdown e testo extra"""
+    import re
+    # Rimuovi code blocks markdown
+    text = re.sub(r'```ya?ml?\n?', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'```\n?', '', text)
+    # Trova dove inizia watchlist:
+    match = re.search(r'^watchlist:', text, re.MULTILINE)
+    if match:
+        text = text[match.start():]
+    return text.strip()
+
 @app.post("/config/yaml")
 async def set_yaml(request: Request):
     body = await request.body()
     try:
-        parsed = yaml.safe_load(body.decode('utf-8'))
-        if "watchlist" not in parsed:
-            raise HTTPException(400, "YAML deve contenere 'watchlist'")
-        for stock in parsed["watchlist"]:
+        raw_text = body.decode('utf-8')
+        cleaned = clean_yaml_input(raw_text)
+        parsed = yaml.safe_load(cleaned)
+
+        if not parsed or "watchlist" not in parsed:
+            raise HTTPException(400, "YAML deve contenere 'watchlist:'")
+
+        watchlist = parsed["watchlist"]
+        if not isinstance(watchlist, list):
+            raise HTTPException(400, "watchlist deve essere una lista")
+
+        for stock in watchlist:
             if "ticker" not in stock:
                 raise HTTPException(400, "Ogni stock deve avere 'ticker'")
-        
-        wl.set_watchlist(parsed["watchlist"])
+            # Normalizza ticker (rimuovi virgolette extra, uppercase)
+            stock["ticker"] = str(stock["ticker"]).strip().upper()
+
+        wl.set_watchlist(watchlist)
         tickers = wl.get_tickers()
         await send_telegram(f"📋 <b>NUOVA CONFIG</b>\n\n{', '.join(tickers)}")
         return {"status": "ok", "tickers": tickers}
     except yaml.YAMLError as e:
         raise HTTPException(400, f"YAML non valido: {e}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(400, f"Errore: {e}")
 
 @app.post("/config/clear")
 async def clear():
@@ -588,7 +614,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#0f172a;
 <div id="cfgModal" class="modal">
 <div class="card">
 <h3 style="margin-bottom:12px">📋 Incolla YAML dall'AI</h3>
-<div class="help-text">Incolla qui la risposta YAML generata da ChatGPT/Claude/Gemini</div>
+<div class="help-text">Incolla qui la risposta YAML generata da ChatGPT/Claude/Gemini/Grok</div>
 <textarea id="yamlIn" placeholder="watchlist:
   - ticker: RIOT
     name: Riot Platforms
@@ -598,31 +624,29 @@ body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#0f172a;
     ..."></textarea>
 <div class="modal-btns">
 <button class="btn btn-secondary" onclick="hideCfg()">Annulla</button>
-<button class="btn btn-secondary" onclick="loadCfg()">📥 Vedi Attuale</button>
+<button class="btn btn-secondary" onclick="pasteFromClipboard()">📋 Incolla Clipboard</button>
 <button class="btn btn-primary" onclick="saveCfg()">💾 Applica</button>
 </div>
 </div>
 </div>
 
 <script>
-const PROMPT_TEMPLATE = `Sei un analista finanziario. Genera config YAML per bot di monitoraggio stock.
+const PROMPT_TEMPLATE = `Genera YAML per monitoraggio stock. Rispondi SOLO con YAML valido, senza spiegazioni.
 
-REGOLE:
-1. Suggerisci {numStocks} titoli azionari NYSE/NASDAQ
-2. Solo ticker validi e liquidi
-3. Rispondi SOLO con YAML, niente altro testo
+PARAMETRI RICHIESTI:
+- Numero titoli: {numStocks}
+- Rischio: {riskLevel}
+- Settore: {sector}
+- Market Cap: {marketCap}
 
-SCHEMA YAML (rispetta esattamente):
+COPIA ESATTAMENTE QUESTO FORMATO (sostituisci solo i valori):
 
 watchlist:
-  - ticker: "SIMBOLO"
-    name: "Nome Azienda"
-    thesis: "Motivo per monitorare (1 frase)"
-    catalyst: "Evento catalizzatore specifico"
-    sector: "Settore"
-    risk_level: "{riskLevel}"
+  - ticker: "AAPL"
+    name: "Apple Inc"
+    thesis: "Motivo breve"
     entry_rules:
-      breakout_above: 0.00
+      breakout_above: 150.00
       min_daily_change_pct: 3.0
       min_volume: 1000000
     exit_rules:
@@ -633,13 +657,14 @@ watchlist:
       daily_change_above: 7
       daily_change_below: -7
 
-PARAMETRI:
-- Rischio: {riskLevel}
-- Settore: {sector}
-- Market Cap: {marketCap}
-- Data: ${new Date().toISOString().split('T')[0]}
+IMPORTANTE:
+- ticker: simbolo NYSE/NASDAQ valido tra virgolette
+- breakout_above: prezzo numerico (es: 150.00)
+- Tutti i numeri SENZA virgolette
+- Indentazione: 2 spazi
+- Ripeti il blocco "- ticker:" per ogni titolo
 
-Genera SOLO il blocco YAML.`;
+Genera {numStocks} titoli.`;
 
 function getMarketCapSelection() {
     const select = document.getElementById('marketCap');
@@ -713,12 +738,15 @@ h+=`<div class="card"><div class="card-header"><span class="ticker">${t}</span><
 if(!h)h='<div class="empty">Watchlist vuota<br><br>1. Clicca "📝 Genera Prompt"<br>2. Copialo su ChatGPT/Claude<br>3. Incolla la risposta YAML</div>';
 document.getElementById('app').innerHTML=h}
 
-function showCfg(){document.getElementById('cfgModal').classList.add('active')}
+function showCfg(){document.getElementById('cfgModal').classList.add('active');pasteFromClipboard()}
 function hideCfg(){document.getElementById('cfgModal').classList.remove('active')}
+async function pasteFromClipboard(){
+try{const text=await navigator.clipboard.readText();if(text&&(text.includes('watchlist')||text.includes('ticker'))){document.getElementById('yamlIn').value=text}}catch(e){console.log('Clipboard non disponibile')}}
 async function loadCfg(){const r=await fetch('/config/yaml'),d=await r.json();document.getElementById('yamlIn').value=d.yaml}
-async function saveCfg(){const y=document.getElementById('yamlIn').value;
+function cleanYaml(y){return y.replace(/```yaml\n?/gi,'').replace(/```\n?/g,'').replace(/^[\s\S]*?(watchlist:)/m,'$1').trim()}
+async function saveCfg(){let y=document.getElementById('yamlIn').value;y=cleanYaml(y);
 try{const r=await fetch('/config/yaml',{method:'POST',headers:{'Content-Type':'text/plain'},body:y}),d=await r.json();
-if(d.status==='ok'){alert('✅ Applicato: '+d.tickers.join(', '));hideCfg();load()}else alert('❌ '+JSON.stringify(d))}catch(e){alert('❌ '+e.message)}}
+if(d.status==='ok'){alert('✅ Applicato: '+d.tickers.join(', '));hideCfg();load()}else alert('❌ '+(d.detail||JSON.stringify(d)))}catch(e){alert('❌ '+e.message)}}
 async function doCheck(){const b=document.getElementById('ckBtn');b.disabled=true;b.textContent='⏳';await fetch('/check',{method:'POST'});await load();b.disabled=false;b.textContent='🔄 Check'}
 async function doTest(){const r=await fetch('/test',{method:'POST'}),d=await r.json();alert(d.success?'✅ Telegram OK':'❌ Errore')}
 async function doEnter(t){if(!confirm('ENTRY '+t+'?'))return;await fetch('/position/enter?ticker='+t,{method:'POST'});load()}
