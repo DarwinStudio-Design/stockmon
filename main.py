@@ -707,7 +707,7 @@ body{{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#0f172a
 <div id="cfgModal" class="modal">
 <div class="card">
 <h3 style="margin-bottom:12px">📋 Incolla YAML dall'AI</h3>
-<div class="help-text">Tieni premuto nel box sotto e seleziona "Incolla"</div>
+<div class="help-text">Premi "📋 Incolla" per incollare dalla clipboard</div>
 <textarea id="yamlIn" placeholder="watchlist:
   - ticker: RIOT
     name: Riot Platforms
@@ -717,6 +717,7 @@ body{{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#0f172a
     ..."></textarea>
 <div class="modal-btns">
 <button class="btn btn-secondary" onclick="hideCfg()">Annulla</button>
+<button class="btn btn-secondary" onclick="pasteClip()">📋 Incolla</button>
 <button class="btn btn-primary" onclick="saveCfg()">💾 Applica</button>
 </div>
 </div>
@@ -834,6 +835,15 @@ document.getElementById('app').innerHTML=h}}
 
 function showCfg(){{document.getElementById('cfgModal').classList.add('active')}}
 function hideCfg(){{document.getElementById('cfgModal').classList.remove('active')}}
+async function pasteClip(){{
+try{{
+const text=await navigator.clipboard.readText();
+if(text){{document.getElementById('yamlIn').value=text;}}
+}}catch(e){{
+document.getElementById('yamlIn').focus();
+document.execCommand('paste');
+}}
+}}
 function cleanYaml(y){{return y.replace(/```yaml\\n?/gi,'').replace(/```\\n?/g,'').replace(/^[\\s\\S]*?(watchlist:)/m,'$1').trim()}}
 async function saveCfg(){{let y=document.getElementById('yamlIn').value;y=cleanYaml(y);
 try{{const r=await fetch(API+'/config/yaml',{{method:'POST',headers:{{'Content-Type':'text/plain'}},body:y}}),d=await r.json();
