@@ -370,13 +370,13 @@ async def telegram_webhook(request: Request):
 
             msg = f"""🎉 <b>Benvenuto in Stock Monitor!</b>
 
-Il tuo link dashboard personale:
-<code>{dashboard_url}</code>
+👉 <a href="{dashboard_url}">Apri la tua Dashboard</a>
 
 <b>Comandi:</b>
 /status - Vedi la tua watchlist
 /check - Forza controllo mercati
 /clear - Svuota watchlist
+/link - Mostra link dashboard
 
 Oppure incolla direttamente uno YAML generato da AI."""
             await send_telegram(msg, chat_id)
@@ -414,7 +414,7 @@ Oppure incolla direttamente uno YAML generato da AI."""
         if text.strip().lower() == "/link":
             base_url = os.getenv("RAILWAY_PUBLIC_DOMAIN", "localhost:8000")
             dashboard_url = f"https://{base_url}/d/{token}"
-            await send_telegram(f"🔗 La tua dashboard:\n<code>{dashboard_url}</code>", chat_id)
+            await send_telegram(f"🔗 <a href=\"{dashboard_url}\">Apri la tua Dashboard</a>", chat_id)
             return {"ok": True}
 
         # Se contiene "watchlist:" probabilmente è YAML
