@@ -566,6 +566,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#0f172a;
 <option value="alto" selected>Rischio Alto</option>
 <option value="estremo">Rischio Estremo</option>
 </select>
+<select id="marketCap" multiple style="height:80px">
+<option value="large">Large Cap (>$10B)</option>
+<option value="mid">Mid Cap ($2B-$10B)</option>
+<option value="small" selected>Small Cap ($300M-$2B)</option>
+<option value="penny">Penny Stock (<$5)</option>
+</select>
+<div class="help-text" style="margin:4px 0;font-size:11px">Ctrl+click per selezione multipla</div>
 <input type="text" id="sectorFocus" placeholder="Settore (opzionale): crypto, biotech, tech...">
 <input type="number" id="numStocks" value="2" min="1" max="3" placeholder="Numero stock (1-3)">
 <div class="help-text">1. Clicca "Copia Prompt"<br>2. Incollalo su ChatGPT/Claude/Gemini<br>3. Copia la risposta YAML<br>4. Torna qui e clicca "📋 Incolla YAML"</div>
@@ -629,18 +636,29 @@ watchlist:
 PARAMETRI:
 - Rischio: {riskLevel}
 - Settore: {sector}
+- Market Cap: {marketCap}
 - Data: ${new Date().toISOString().split('T')[0]}
 
 Genera SOLO il blocco YAML.`;
+
+function getMarketCapSelection() {
+    const select = document.getElementById('marketCap');
+    const selected = Array.from(select.selectedOptions).map(o => o.value);
+    if (selected.length === 0) return 'qualsiasi';
+    const labels = {large:'Large Cap (>$10B)', mid:'Mid Cap ($2-10B)', small:'Small Cap ($300M-2B)', penny:'Penny (<$5)'};
+    return selected.map(v => labels[v] || v).join(', ');
+}
 
 function generatePrompt() {
     const risk = document.getElementById('riskLevel').value;
     const sector = document.getElementById('sectorFocus').value || 'qualsiasi';
     const num = document.getElementById('numStocks').value;
+    const mcap = getMarketCapSelection();
     return PROMPT_TEMPLATE
         .replace(/{riskLevel}/g, risk.toUpperCase())
         .replace('{numStocks}', num)
-        .replace('{sector}', sector);
+        .replace('{sector}', sector)
+        .replace('{marketCap}', mcap);
 }
 
 function showPrompt() {
