@@ -459,8 +459,12 @@ async def telegram_setup():
 # ============== API PER DASHBOARD (con token) ==============
 
 def clean_yaml_input(text: str) -> str:
+    # Rimuovi code blocks markdown
     text = re.sub(r'```ya?ml?\n?', '', text, flags=re.IGNORECASE)
     text = re.sub(r'```\n?', '', text)
+    # Converti pallini in trattini (Grok usa • invece di -)
+    text = text.replace('•', '-').replace('●', '-').replace('◦', '-')
+    # Trova dove inizia watchlist:
     match = re.search(r'^watchlist:', text, re.MULTILINE)
     if match:
         text = text[match.start():]
@@ -703,7 +707,7 @@ body{{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#0f172a
 <div id="cfgModal" class="modal">
 <div class="card">
 <h3 style="margin-bottom:12px">📋 Incolla YAML dall'AI</h3>
-<div class="help-text">Incolla qui la risposta YAML generata da ChatGPT/Claude/Gemini/Grok</div>
+<div class="help-text">Tieni premuto nel box sotto e seleziona "Incolla"</div>
 <textarea id="yamlIn" placeholder="watchlist:
   - ticker: RIOT
     name: Riot Platforms
@@ -713,7 +717,6 @@ body{{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#0f172a
     ..."></textarea>
 <div class="modal-btns">
 <button class="btn btn-secondary" onclick="hideCfg()">Annulla</button>
-<button class="btn btn-secondary" onclick="pasteFromClipboard()">📋 Incolla Clipboard</button>
 <button class="btn btn-primary" onclick="saveCfg()">💾 Applica</button>
 </div>
 </div>
@@ -829,10 +832,8 @@ h+=`<div class="card"><div class="card-header"><span class="ticker">${{t}}</span
 if(!h)h='<div class="empty">Watchlist vuota<br><br>1. Clicca "📝 Genera Prompt"<br>2. Copialo su ChatGPT/Claude<br>3. Incolla la risposta YAML</div>';
 document.getElementById('app').innerHTML=h}}
 
-function showCfg(){{document.getElementById('cfgModal').classList.add('active');pasteFromClipboard()}}
+function showCfg(){{document.getElementById('cfgModal').classList.add('active')}}
 function hideCfg(){{document.getElementById('cfgModal').classList.remove('active')}}
-async function pasteFromClipboard(){{
-try{{const text=await navigator.clipboard.readText();if(text&&(text.includes('watchlist')||text.includes('ticker'))){{document.getElementById('yamlIn').value=text}}}}catch(e){{console.log('Clipboard non disponibile')}}}}
 function cleanYaml(y){{return y.replace(/```yaml\\n?/gi,'').replace(/```\\n?/g,'').replace(/^[\\s\\S]*?(watchlist:)/m,'$1').trim()}}
 async function saveCfg(){{let y=document.getElementById('yamlIn').value;y=cleanYaml(y);
 try{{const r=await fetch(API+'/config/yaml',{{method:'POST',headers:{{'Content-Type':'text/plain'}},body:y}}),d=await r.json();
